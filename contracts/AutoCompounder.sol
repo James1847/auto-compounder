@@ -91,7 +91,9 @@ contract AutoCompounder is Ownable, ReentrancyGuard {
         uint256 _pid = masterWombatV2.getAssetPid(lpTokenUSDCAddress);
         // get pending wom token amount to be harvested
         (uint256 pendingWomAmount, , ,) = masterWombatV2.pendingTokens(_pid, msg.sender);
-        require(pendingWomAmount > 0, "Nothing to compound");
+        if (pendingWomAmount == 0) {
+            return 0;
+        }
         // check if wom allowance is enough
         require(womAllowance >= pendingWomAmount, "Not enough allowance for wom token");
         // run depositFor with amount 0, just to harvest
