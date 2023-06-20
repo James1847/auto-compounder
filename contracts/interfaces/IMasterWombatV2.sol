@@ -37,4 +37,6 @@ interface IMasterWombatV2 {
     function depositFor(uint256 _pid, uint256 _amount, address _user) external;
 
     function updateFactor(address _user, uint256 _newVeWomBalance) external;
+
+    function userInfo(uint256 _pid, address _user) external view returns (uint128, uint128, uint128, uint128);
 }
