@@ -35,28 +35,30 @@ contract AutoCompounder is Ownable, ReentrancyGuard {
     constructor() {
     }
 
-    // easy way to mint faucet usdc
+    // @dev easy way to mint faucet usdc
     function mintFaucetUSDC(uint256 _amount) external onlyOwner {
         usdc.faucet(_amount);
         usdc.transfer(msg.sender, _amount);
         emit MintedFaucetUSDC(_amount);
     }
 
-
+    // @dev deposit the usdc to pool to get lp token back
     function depositToPool(uint256 _amount, uint256 _deadline) internal returns (uint256) {
         require(_amount > 0, "Amount must be greater than 0");
+        // transfer and approve usdc
         usdc.transferFrom(msg.sender, address(this), _amount);
         usdc.approve(poolV2ProxyAddress, _amount);
+        // deposit to poolV2
         uint256 lpReward = poolV2.deposit(_usdc, _amount, 0, address(this), _deadline, false);
         require(lpReward > 0, "lp token has been exploited");
         emit Deposit(_amount, lpReward);
         return lpReward;
     }
 
-    // cause MasterWombatV2 contract can only withdraw lp tokens to msg.sender by calling the withdraw function
-    // if we try to withdraw lp tokens from smart contract the msg.sender will be address(this), the amount to be withdraw will always be zero
-    // so user have to withdraw lp tokens by directly calling the MasterWombatV2 contract's withdraw function
-    // then user will call withdrawFromPool of this contract to withdraw his USDC by sending his lp tokens to this contract
+    // @notice cause MasterWombatV2 contract can only withdraw lp tokens to msg.sender by calling the withdraw function
+    // @notice if we try to withdraw lp tokens from smart contract the msg.sender will be address(this), the amount to be withdraw will always be zero
+    // @notice so user have to withdraw lp tokens by directly calling the MasterWombatV2 contract's withdraw function
+    // @notice then user will call withdrawFromPool of this contract to withdraw his USDC by sending his lp tokens to this contract
     function withdrawFromPool(uint256 _amount, uint256 _minimumAmountOut, uint256 _deadline) external returns (uint256) {
         // transfer usdc lp token from user to this contract
         usdcLP.transferFrom(msg.sender, address(this), _amount);
@@ -70,7 +72,7 @@ contract AutoCompounder is Ownable, ReentrancyGuard {
 
     }
 
-    // stake usdc lp token to MasterWombatV2
+    // @dev stake usdc lp token to MasterWombatV2
     function stakeToMasterWombat(uint256 _lpReward) internal {
         uint256 _pid = masterWombatV2.getAssetPid(lpTokenUSDCAddress);
         usdcLP.approve(address(masterWombatV2), _lpReward);
@@ -78,8 +80,8 @@ contract AutoCompounder is Ownable, ReentrancyGuard {
         emit Stake(_lpReward, msg.sender);
     }
 
-    // 1\ deposit usdc to poolV2 to get lpToken
-    // 2\ stake lpToken to MasterWombatV2
+    // @dev 1\ deposit usdc to poolV2 to get lpToken
+    // @dev 2\ stake lpToken to MasterWombatV2
     function depositAndStake(uint256 _amount, uint256 _deadline) public returns (uint256) {
         uint256 lpReward = depositToPool(_amount, _deadline);
         require(lpReward > 0, "deposit failed");
@@ -87,27 +89,27 @@ contract AutoCompounder is Ownable, ReentrancyGuard {
         return lpReward;
     }
 
-    // get the amount of pending wom rewards from masterWombatV2
+    // @dev get the amount of pending wom rewards from masterWombatV2
     function getPendingWom(address _user) public view returns (uint256) {
         uint256 _pid = masterWombatV2.getAssetPid(lpTokenUSDCAddress);
         (uint256 pendingWomAmount, , ,) = masterWombatV2.pendingTokens(_pid, _user);
         return pendingWomAmount;
     }
 
-    // get staked lp token amount of user
+    // @dev get staked lp token amount of user
     function getStakedLp(address _user) public view returns (uint128) {
         uint256 _pid = masterWombatV2.getAssetPid(lpTokenUSDCAddress);
         (uint128 stakedLp,,,) = masterWombatV2.userInfo(_pid, _user);
         return stakedLp;
     }
 
-    // autoCompound will first check the balance of pending wom token to be withdraw
-    // if the amount of pending wom token is zero, then return zero
+    // @dev autoCompound will first check the balance of pending wom token to be withdraw
+    // @notice if the amount of pending wom token is zero, then return zero
     // 1\ otherwise the contract will first harvest the pending wom tokens:                WOM: masterWombatV2 -> msg.sender
     // 2\ then transfer the pending amount of wom token from msg.sender to this contract:   WOM: msg.sender -> address(this)
     // 3\ then swap wom token to usdc and send usdc to msg.sender :                        WOM -> USDC -> USDC: msg.sender -> address(this)
     // 4\ finally depositAndStake Again:                                                   USDC -> USDCLP -> masterWombatV2
-    // notice we have to make sure user have already approve the enough amount of USDC and WOM tokens to our contract, this process will be handled by frontend
+    // @notice we have to make sure user have already approve the enough amount of USDC and WOM tokens to our contract, this process will be handled by frontend
     function autoCompound() external nonReentrant returns (uint256) {
         // get wom token allowance from user to this contract
         uint256 womAllowance = wom.allowance(msg.sender, address(this));
@@ -136,12 +138,12 @@ contract AutoCompounder is Ownable, ReentrancyGuard {
     }
 
     // swap wom token to usdc, we will use pancakeswap v3 router contract directly
-    // actually pancakeswap v3 router contract is forked from uniswap v3 router2 contract
+    // @notice actually pancakeswap v3 router contract is forked from uniswap v3 router2 contract
     function swapFromPancakeV3(uint256 amountIn) internal nonReentrant returns (uint256 amountOut) {
         wom.approve(address(pancakeSwapRouter), amountIn);
         // based on the task we have to swap tokens on PancakeSwap V3 WOM-USDC pool, which pool fee is 100 (0.1%)
         uint24 poolFee = 100;
-        // @todo: if we want swap as much amountOut as possible, maybe we have to get the best route from pancakeswap alpha router
+        // @todo if we want swap as much amountOut as possible, maybe we have to get the best route from pancakeswap alpha router
         IV3SwapRouter.ExactInputSingleParams memory params = IV3SwapRouter.ExactInputSingleParams({
             tokenIn: address(wom),
             tokenOut: address(usdc),
